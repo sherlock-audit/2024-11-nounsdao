@@ -35,10 +35,14 @@ export function handleStreamCreated(event: StreamCreated): void {
   const nounId = event.params.nounId.toString();
   const streamId = genericUniqueId(event);
 
+  const state = getStreamEscrowState();
+  state.ethStreamedPerTick = event.params.newEthStreamedPerTick;
+  state.save();
+
   const s = new Stream(streamId);
   s.createdTimestamp = event.block.timestamp;
   s.createdBlock = event.block.number;
-  s.startTick = getStreamEscrowState().currentTick;
+  s.startTick = state.currentTick;
   s.noun = nounId;
   s.totalAmount = event.params.totalAmount;
   s.streamLengthInTicks = event.params.streamLengthInTicks;
@@ -50,7 +54,9 @@ export function handleStreamCreated(event: StreamCreated): void {
 
   const son = getOrCreateStreamsOfNoun(nounId);
   if (son.currentStream != null) {
-    son.pastStreams.push(son.currentStream!);
+    let pastStreams = son.pastStreams;
+    pastStreams.push(son.currentStream!);
+    son.pastStreams = pastStreams;
   }
   son.currentStream = s.id;
   son.save();
