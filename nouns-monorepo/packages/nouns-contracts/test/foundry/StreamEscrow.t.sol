@@ -693,6 +693,17 @@ contract DAOSettersTest is BaseStreamEscrowTest {
         // check that new recipient received the noun
         assertEq(nounsToken.ownerOf(1), makeAddr('nounsRecipient2'));
     }
+
+    function test_setNounsRecipient_cantBeZero() public {
+        vm.prank(treasury);
+        vm.expectRevert('zero address');
+        escrow.setNounsRecipient(address(0));
+    }
+
+    function test_nounsReceipient_cantBeZeroInConstructor() public {
+        vm.expectRevert('zero address');
+        new StreamEscrow(treasury, ethRecipient, address(0), address(nounsToken), streamCreator, 24 hours);
+    }
 }
 
 contract RescueTokensTest is BaseStreamEscrowTest {
@@ -714,6 +725,65 @@ contract RescueTokensTest is BaseStreamEscrowTest {
         escrow.rescueToken(address(erc20), address(123), 1000);
 
         assertEq(erc20.balanceOf(address(123)), 1000);
+    }
+}
+
+contract UnstreamedETHTest is BaseStreamEscrowTest {
+    function test_unstreamedETHForNoun() public {
+        vm.prank(streamCreator);
+        escrow.forwardAllAndCreateStream{ value: 1 ether }({ nounId: 1, streamLengthInTicks: 20 });
+
+        // 1 ether / 20 = 0.05 eth per tick
+        assertEq(escrow.unstreamedETHForNoun(1), 1 ether);
+
+        // forward 5 ticks
+        for (uint i; i < 5; i++) {
+            forwardOneDay();
+        }
+        // check unstreamed eth
+        assertEq(escrow.unstreamedETHForNoun(1), 0.75 ether);
+
+        // forward 15 more ticks
+        for (uint i; i < 15; i++) {
+            forwardOneDay();
+        }
+        // check unstreamed eth
+        assertEq(escrow.unstreamedETHForNoun(1), 0 ether);
+    }
+
+    function test_unstreamedETHForNoun_canceledStream() public {
+        vm.prank(streamCreator);
+        escrow.forwardAllAndCreateStream{ value: 1 ether }({ nounId: 1, streamLengthInTicks: 20 });
+
+        // 1 ether / 20 = 0.05 eth per tick
+        assertEq(escrow.unstreamedETHForNoun(1), 1 ether);
+
+        // forward 5 ticks
+        for (uint i; i < 5; i++) {
+            forwardOneDay();
+        }
+        // check unstreamed eth
+        assertEq(escrow.unstreamedETHForNoun(1), 0.75 ether);
+
+        // cancel stream
+        vm.prank(streamCreator);
+        nounsToken.approve(address(escrow), 1);
+        vm.prank(streamCreator);
+        escrow.cancelStream(1);
+
+        // check unstreamed eth is zero
+        assertEq(escrow.unstreamedETHForNoun(1), 0 ether);
+    }
+
+    function test_unstreamedETHForNoun_returnsZeroForNonExistentStream() public {
+        assertEq(escrow.unstreamedETHForNoun(1), 0 ether);
+
+        // forward 5 ticks
+        for (uint i; i < 5; i++) {
+            forwardOneDay();
+        }
+
+        assertEq(escrow.unstreamedETHForNoun(3), 0 ether);
     }
 }
 
